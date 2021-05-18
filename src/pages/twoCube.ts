@@ -2,10 +2,11 @@ import { mat4, vec3 } from 'gl-matrix';
 import { RefObject } from 'react';
 
 import {
-    Cube, cubeColorOffset, cubePositionOffset, cubeVertexCount, cubeVertexSize, CullMode,
-    GPU_VERTEX_FORMAT_FLOAT_32_X4, GPUComaperFunctionType, GPUPrimitiveTopology, HEIGHT, noop, WIDTH
+    Cube, cubePositionOffset, cubeUVOffset, cubeVertexCount, cubeVertexSize, CullMode,
+    GPU_VERTEX_FORMAT_FLOAT_32_X2, GPU_VERTEX_FORMAT_FLOAT_32_X4, GPUComaperFunctionType,
+    GPUPrimitiveTopology, HEIGHT, noop, WIDTH
 } from '../constant';
-import { fragment, vertex } from '../shaders/cube';
+import { basicPositionVertexShader, vertexPositionColorShader } from '../shaders/cube';
 
 const SWAP_CHAIN_FORMAT = 'bgra8unorm';
 const DEPTH_TEXTURE_FORMAT = 'depth24plus';
@@ -35,7 +36,7 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
     const pipeline = device.createRenderPipeline({
         vertex: {
             module: device.createShaderModule({
-                code: vertex
+                code: basicPositionVertexShader
             }),
             entryPoint: 'main',
             buffers: [
@@ -48,8 +49,8 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
                             format: GPU_VERTEX_FORMAT_FLOAT_32_X4
                         }, {
                             shaderLocation: 1,
-                            offset: cubeColorOffset,
-                            format: GPU_VERTEX_FORMAT_FLOAT_32_X4
+                            offset: cubeUVOffset,
+                            format: GPU_VERTEX_FORMAT_FLOAT_32_X2
                         }
                     ]
                 }
@@ -57,12 +58,12 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
         },
         fragment: {
             module: device.createShaderModule({
-                code: fragment
+                code: vertexPositionColorShader
             }),
             entryPoint: 'main',
             targets: [
                 {
-                    format: SWAP_CHAIN_FORMAT as GPUTextureFormat
+                    format: SWAP_CHAIN_FORMAT
                 }
             ]
         },
@@ -112,19 +113,37 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
         }
     };
 
-    const uniformBufferSize = 4 * 16;
+    const matrixSize = 4 * 16;
+    const uniformOffset = 256; // uniformBindGroup must be 256-byte aligned
+    const uniformBufferSize = matrixSize + uniformOffset;
     const uniformBuffer = device.createBuffer({
         size: uniformBufferSize,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
-    const uniformBindGroup = device.createBindGroup({
+    const uniformBindGroup1 = device.createBindGroup({
         layout: pipeline.getBindGroupLayout(0),
         entries: [
             {
                 binding: 0,
                 resource: {
-                    buffer: uniformBuffer
+                    buffer: uniformBuffer,
+                    offset: 0,
+                    size: matrixSize
+                }
+            }
+        ]
+    });
+
+    const uniformBindGroup2 = device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+            {
+                binding: 0,
+                resource: {
+                    buffer: uniformBuffer,
+                    offset: uniformOffset,
+                    size: matrixSize
                 }
             }
         ]
@@ -132,21 +151,57 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
 
     const projectionMatrix = mat4.create();
     mat4.perspective(projectionMatrix,  Math.PI / 2, WIDTH / HEIGHT, 1, 100.0);
-    mat4.translate(projectionMatrix, projectionMatrix, vec3.fromValues(0, 0, -5));
+    mat4.translate(projectionMatrix, projectionMatrix, vec3.fromValues(0, 0, -7));
 
-    const viewMatrix = mat4.create();
+    const modelView1 = mat4.create();
+    const modelView2 = mat4.create();
+
+    mat4.translate(modelView1, modelView1, vec3.fromValues(4, 0, 0));
+    mat4.translate(modelView2, modelView2, vec3.fromValues(-4, 0, 0));
+
+
+    // const viewMatrix = mat4.create();
+    // mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 0, -7));
+
     const angle = Math.PI / 90;
 
-    function getTransformMatrix(): Float32Array {
-        mat4.rotate(viewMatrix, viewMatrix, angle, vec3.fromValues(1, 1, 0));
-        const transformMatrix = mat4.create();
-        mat4.multiply(transformMatrix, projectionMatrix, viewMatrix);
-        return transformMatrix as Float32Array;
+    const resultMatrix1 = mat4.create() as Float32Array;
+    const resultMatrix2 = mat4.create() as Float32Array;
+
+    function getTransformMatrix(): { m1: Float32Array, m2: Float32Array } {
+        mat4.rotate(modelView1, modelView1, angle, vec3.fromValues(1, -1, 0));
+        mat4.rotate(modelView2, modelView2, angle, vec3.fromValues(1, -1, 0));
+        mat4.multiply(resultMatrix1, projectionMatrix, modelView1);
+        mat4.multiply(resultMatrix2, projectionMatrix, modelView2);
+
+        return {
+            m1: resultMatrix1,
+            m2: resultMatrix2
+        };
     }
 
     function frame() {
-        const matrix = getTransformMatrix();
-        device!.queue.writeBuffer(uniformBuffer, 0, matrix.buffer, matrix.byteOffset, matrix.byteLength);
+        if (!canvas.current) return;
+
+        const matrixs = getTransformMatrix();
+
+        device.queue.writeBuffer(
+            uniformBuffer,
+            0,
+            matrixs.m1.buffer,
+            matrixs.m1.byteOffset,
+            matrixs.m1.byteLength
+        );
+
+        device.queue.writeBuffer(
+            uniformBuffer,
+            uniformOffset,
+            matrixs.m2.buffer,
+            matrixs.m2.byteOffset,
+            matrixs.m2.byteLength
+        );
+
+
         const currTexture = swapChain.getCurrentTexture() ?? defaultTexture;
         renderPassDescriptor.colorAttachments[0].view = currTexture.createView();
         
@@ -154,8 +209,13 @@ export async function init(canvas: RefObject<HTMLCanvasElement>) {
         const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
         passEncoder.setPipeline(pipeline);
         passEncoder.setVertexBuffer(0, verticesBuffer);
-        passEncoder.setBindGroup(0, uniformBindGroup);
+
+        passEncoder.setBindGroup(0, uniformBindGroup1);
         passEncoder.draw(cubeVertexCount, 1, 0, 0);
+
+        passEncoder.setBindGroup(0, uniformBindGroup2);
+        passEncoder.draw(cubeVertexCount, 1, 0, 0);
+
         passEncoder.endPass();
         
         device.queue.submit([commandEncoder.finish()]);

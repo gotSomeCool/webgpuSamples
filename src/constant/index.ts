@@ -7,6 +7,8 @@ export * from './meshes';
 export const noop = () => {return};
 
 export const GPU_VERTEX_FORMAT_FLOAT_32_X4: GPUVertexFormat = 'float32x4';
+export const GPU_VERTEX_FORMAT_FLOAT_32_X2: GPUVertexFormat = 'float32x2';
+
 
 export enum GPUPrimitiveTopology {
     TRIANGLE_LIST = 'triangle-list'

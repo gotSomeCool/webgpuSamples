@@ -1,19 +1,24 @@
 import './App.css';
-import {HEIGHT, WIDTH, CANVAS_ID, noop} from './constant';
+
 import React from 'react';
-import {init as triangleInit} from './pages/triangle';
-import {init as cubeInit} from './pages/cube';
+
+import { CANVAS_ID, HEIGHT, noop, WIDTH } from './constant';
+import { init as cubeInit } from './pages/cube';
+import { init as triangleInit } from './pages/triangle';
+import { init as twoCubeInit } from './pages/twoCube';
 
 enum ESample {
   NONE = -1,
   TRIANGLE,
-  ROTATINGCUBE
+  ROTATING_CUBE,
+  TWO_CUBE
 }
 
 const List = {
   [ESample.NONE]: noop,
   [ESample.TRIANGLE]: triangleInit,
-  [ESample.ROTATINGCUBE]: cubeInit
+  [ESample.ROTATING_CUBE]: cubeInit,
+  [ESample.TWO_CUBE]: twoCubeInit
 }
 
 interface IState {
@@ -61,7 +66,8 @@ export default class App extends React.PureComponent<{}, IState> {
       <>
         <div style={{width: "100%", lineHeight: "32px"}}>
             <div className="Tag" onClick={this.onTagClick(ESample.TRIANGLE)}> TRIANGLE </div>
-            <div className="Tag" onClick={this.onTagClick(ESample.ROTATINGCUBE)}> ROTATING CUBE </div>
+            <div className="Tag" onClick={this.onTagClick(ESample.ROTATING_CUBE)}> ROTATING CUBE </div>
+            <div className="Tag" onClick={this.onTagClick(ESample.TWO_CUBE)}> TWO CUBE </div>
         </div>
         <canvas id={CANVAS_ID}  ref={this.canvasRef} height={HEIGHT} width={WIDTH} />
       </>

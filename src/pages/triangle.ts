@@ -1,8 +1,8 @@
-import { mat4 } from 'gl-matrix';
+import { RefObject } from 'react';
+
 // import vertex from '../shaders/triangle/vertex.wgsl';
 // import fragment from '../shaders/triangle/fragment.wgsl';
 import { HEIGHT, noop, WIDTH } from '../constant';
-import { RefObject } from 'react';
 
 const SWAP_CHAIN_FORMAT = 'bgra8unorm';
 const TOPOLOGY = 'triangle-list';
